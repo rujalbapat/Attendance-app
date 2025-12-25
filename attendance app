@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smart Attendance</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+*{box-sizing:border-box;font-family:'Orbitron',sans-serif;}
+
+body{
+  margin:0;
+  padding:30px 10px;
+  background:radial-gradient(circle at top,#0f2027,#203a43,#2c5364);
+  color:#fff;
+}
+
+.container{
+  max-width:520px;
+  margin:auto;
+  background:rgba(255,255,255,0.08);
+  backdrop-filter:blur(15px);
+  padding:22px;
+  border-radius:22px;
+  box-shadow:0 0 45px rgba(0,255,255,0.3);
+}
+
+h1{text-align:center;}
+
+input{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:none;
+  outline:none;
+}
+
+button{
+  width:100%;
+  margin-top:8px;
+  padding:12px;
+  border-radius:12px;
+  border:none;
+  background:linear-gradient(135deg,#00f260,#0575e6);
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.3s ease;
+}
+button:hover{
+  transform:translateY(-2px) scale(1.02);
+  box-shadow:0 0 18px rgba(0,242,96,0.7);
+}
+button:active{transform:scale(0.97);}
+
+.subject{
+  background:rgba(255,255,255,0.12);
+  margin-top:18px;
+  padding:16px;
+  border-radius:18px;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.delete{
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+.delete:hover{background:rgba(255,0,0,0.6);}
+
+.folder{
+  margin-top:12px;
+  padding:12px;
+  border-radius:12px;
+  background:linear-gradient(135deg,rgba(0,255,255,.18),rgba(0,0,0,.3));
+  cursor:pointer;
+}
+
+.content{
+  display:none;
+  margin-top:10px;
+  padding:14px;
+  background:rgba(0,0,0,.35);
+  border-radius:14px;
+}
+
+.controls button{width:auto;margin-right:6px;}
+
+.controls button:not(.absent){
+  background:linear-gradient(135deg,#56ab2f,#a8e063);
+}
+.absent{
+  background:linear-gradient(135deg,#cb2d3e,#ef473a);
+}
+.undo{
+  background:linear-gradient(135deg,#8e2de2,#4a00e0);
+}
+
+.status{text-align:center;margin-top:8px;font-weight:600;}
+.info{text-align:center;font-size:13px;color:#ffd369;margin-top:6px;}
+
+.overall{
+  margin-top:20px;
+  padding:15px;
+  background:rgba(0,0,0,.4);
+  border-radius:18px;
+  text-align:center;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+<h1>SMART ATTENDANCE</h1>
+
+<input id="subjectName" placeholder="ENTER SUBJECT NAME">
+<button onclick="addSubject()">➕ ADD SUBJECT</button>
+
+<div class="overall" id="overallBox"></div>
+<div id="subjects"></div>
+</div>
+
+<script>
+let subjects = JSON.parse(localStorage.getItem("subjects")) || [];
+let openFolders = {};   // 🔑 keeps folder state
+
+function save(){
+  localStorage.setItem("subjects", JSON.stringify(subjects));
+}
+
+function addSubject(){
+  let n = subjectName.value.trim();
+  if(!n) return;
+  subjects.push({name:n, history:[]});
+  subjectName.value="";
+  save();
+  render();
+}
+
+function mark(i,v){
+  openFolders["a"+i] = true;   // 🔒 keep folder open
+  subjects[i].history.push(v);
+  save();
+  render();
+}
+
+function undo(i){
+  if(subjects[i].history.length===0) return;
+  openFolders["a"+i] = true;   // 🔒 keep folder open
+  subjects[i].history.pop();
+  save();
+  render();
+}
+
+function del(i){
+  if(!confirm("Delete this subject?")) return;
+  if(!confirm("This action is permanent. Continue?")) return;
+  subjects.splice(i,1);
+  openFolders = {};
+  save();
+  render();
+}
+
+function toggle(id){
+  openFolders[id] = !openFolders[id];
+  document.getElementById(id).style.display =
+    openFolders[id] ? "block" : "none";
+}
+
+function needed(p,t){
+  if(t===0) return 0;
+  return Math.max(0, Math.ceil((0.75*t - p) / 0.25));
+}
+
+function safe(p,t){
+  return Math.max(0, Math.floor((p/0.75) - t));
+}
+
+function render(){
+  subjectsDiv.innerHTML="";
+  let totalAll=0, presentAll=0;
+
+  subjects.forEach((s,i)=>{
+    let total=s.history.length;
+    let present=s.history.filter(v=>v).length;
+    let percent=total ? Math.round(present/total*100) : 0;
+
+    totalAll+=total;
+    presentAll+=present;
+
+    let msg = percent<75
+      ? `🎯 Attend next <b>${needed(present,total)}</b> lectures`
+      : `✅ You can miss <b>${safe(present,total)}</b> lectures`;
+
+    subjectsDiv.innerHTML+=`
+    <div class="subject">
+      <div class="header">
+        <strong>${s.name}</strong>
+        <div class="delete" onclick="del(${i})">🗑</div>
+      </div>
+
+      <div class="status" style="color:${percent>=75?'#00ffcc':'#ff5f6d'}">
+        ${percent}% Attendance
+      </div>
+
+      <div class="info">${msg}</div>
+
+      <div class="folder" onclick="toggle('a${i}')">📂 ATTENDANCE DETAILS</div>
+      <div class="content" id="a${i}">
+        <p>📘 Lectures Conducted: <b>${total}</b></p>
+        <p>✅ Lectures Attended: <b>${present}</b></p>
+
+        <div class="controls">
+          <button onclick="mark(${i},1)">PRESENT</button>
+          <button class="absent" onclick="mark(${i},0)">ABSENT</button>
+          <button class="undo" onclick="undo(${i})" ${total===0?'disabled':''}>UNDO</button>
+        </div>
+      </div>
+
+      <div class="status" style="color:${percent>=75?'#00ffcc':'#ff5f6d'}">
+        ${percent>=75?'ELIGIBLE':'NOT ELIGIBLE'}
+      </div>
+    </div>`;
+  });
+
+  let overallPercent = totalAll ? Math.round(presentAll/totalAll*100) : 0;
+  let miss = safe(presentAll,totalAll);
+  let attend = needed(presentAll,totalAll);
+
+  overallBox.innerHTML=`
+    <h3>📊 OVERALL ATTENDANCE</h3>
+    <p>${overallPercent}% — ${overallPercent>=75?'ELIGIBLE':'NOT ELIGIBLE'}</p>
+    <p>${overallPercent>=75
+      ?`😌 You can miss <b>${miss}</b> lectures overall`
+      :`⚠️ More <b>${attend}</b> lectures to attend`
+    }</p>
+  `;
+
+  /* 🔥 RESTORE OPEN FOLDERS AFTER DOM RENDER */
+  setTimeout(()=>{
+    Object.keys(openFolders).forEach(id=>{
+      let el = document.getElementById(id);
+      if(el && openFolders[id]) el.style.display="block";
+    });
+  },0);
+}
+
+const subjectsDiv = document.getElementById("subjects");
+render();
+</script>
+
+</body>
+</html>
+<link rel="manifest" href="manifest.json">
